@@ -1,0 +1,13 @@
+*&---------------------------------------------------------------------*
+*& Report ZBC_CONVERT_ITAB_TO_EXCEL
+*&---------------------------------------------------------------------*
+*&
+*&---------------------------------------------------------------------*
+REPORT ZBC_CONVERT_ITAB_TO_EXCEL.
+
+INCLUDE: ZBC_CONVERT_ITAB_TO_EXCEL_TOP,
+         ZBC_CONVERT_ITAB_TO_EXCEL_F01.
+
+START-OF-SELECTION.
+  PERFORM exc_prog.
+END-OF-SELECTION.
