@@ -1,0 +1,345 @@
+*&---------------------------------------------------------------------*
+*& Include          ZBC_CONVERT_ITAB_TO_EXCEL_F01
+*&---------------------------------------------------------------------*
+*&---------------------------------------------------------------------*
+*& Form GET_DATA
+*&---------------------------------------------------------------------*
+*& text
+*&---------------------------------------------------------------------*
+*& -->  p1        text
+*& <--  p2        text
+*&---------------------------------------------------------------------*
+FORM EXC_PROG .
+
+  PERFORM: GET_DATA,
+           CREATE_FIELDCATALOG,
+           DISPLAY.
+
+ENDFORM.
+*&---------------------------------------------------------------------*
+*& Form GET_DATA
+*&---------------------------------------------------------------------*
+*& text
+*&---------------------------------------------------------------------*
+*& -->  p1        text
+*& <--  p2        text
+*&---------------------------------------------------------------------*
+FORM GET_DATA .
+
+  SELECT * FROM SBOOK
+      UP TO P_COUNT ROWS
+  INTO CORRESPONDING FIELDS OF TABLE RECS.
+
+ENDFORM.
+*&---------------------------------------------------------------------*
+*& Form CREATE_FIELDCATALOG
+*&---------------------------------------------------------------------*
+*& text
+*&---------------------------------------------------------------------*
+*& -->  p1        text
+*& <--  p2        text
+*&---------------------------------------------------------------------*
+FORM CREATE_FIELDCATALOG .
+
+  CLEAR: FIELDCAT[].
+  CALL FUNCTION 'REUSE_ALV_FIELDCATALOG_MERGE'
+    EXPORTING
+      I_PROGRAM_NAME         = SY-REPID
+      I_STRUCTURE_NAME       = 'SBOOK'
+      I_INCLNAME             = SY-REPID
+    CHANGING
+      CT_FIELDCAT            = FIELDCAT
+    EXCEPTIONS
+      INCONSISTENT_INTERFACE = 1
+      PROGRAM_ERROR          = 2
+      OTHERS                 = 3.
+
+ENDFORM.
+*&---------------------------------------------------------------------*
+*& Form DISPLAY
+*&---------------------------------------------------------------------*
+*& text
+*&---------------------------------------------------------------------*
+*& -->  p1        text
+*& <--  p2        text
+*&---------------------------------------------------------------------*
+FORM DISPLAY .
+
+  PERFORM: LAYOUT,
+           EVENTS.
+
+  CALL FUNCTION 'REUSE_ALV_GRID_DISPLAY'
+    EXPORTING
+      I_CALLBACK_PROGRAM       = SY-REPID
+      I_CALLBACK_PF_STATUS_SET = 'SET_PF_STATUS'
+      IS_LAYOUT                = LAYOUT
+      IT_FIELDCAT              = FIELDCAT[]
+      I_DEFAULT                = 'X'
+      I_SAVE                   = 'A'
+      IT_EVENTS                = EVENTS
+      I_CALLBACK_USER_COMMAND  = 'USER_COMMAND'
+    TABLES
+      T_OUTTAB                 = RECS[].
+
+ENDFORM.
+*&---------------------------------------------------------------------*
+*& Form SET_PF_STATUS
+*&---------------------------------------------------------------------*
+*& text
+*&---------------------------------------------------------------------*
+*& -->  p1        text
+*& <--  p2        text
+*&---------------------------------------------------------------------*
+FORM SET_PF_STATUS USING RT_EXTAB TYPE SLIS_T_EXTAB.
+  SET PF-STATUS 'ZSTATUS'.
+  SET TITLEBAR 'TITLE' WITH SY-UNAME.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*& Form USER_COMMAND
+*&---------------------------------------------------------------------*
+*& text
+*&---------------------------------------------------------------------*
+*& -->  p1        text
+*& <--  p2        text
+*&---------------------------------------------------------------------*
+FORM USER_COMMAND USING R_UCOMM     LIKE SY-UCOMM
+                        RS_SELFIELD TYPE SLIS_SELFIELD.
+  CASE R_UCOMM.
+    WHEN '&CONVERT'.
+      DATA: V_FILENAME TYPE STRING,
+            V_PATH     TYPE STRING,
+            V_FULLPATH TYPE STRING,
+            V_RESULT   TYPE I.
+
+      DATA: T_BINTAB TYPE SOLIX_TAB,
+            V_SIZE   TYPE I.
+
+      CLEAR: V_FILENAME, V_PATH, V_FULLPATH, V_RESULT, V_XSTRING.
+
+      "The address where the excel file is saved
+      CALL METHOD CL_GUI_FRONTEND_SERVICES=>FILE_SAVE_DIALOG
+        EXPORTING
+          WINDOW_TITLE      = 'File Directory'
+          DEFAULT_EXTENSION = 'XLS'
+          INITIAL_DIRECTORY = 'D:\'
+        CHANGING
+          FILENAME          = V_FILENAME
+          PATH              = V_PATH
+          FULLPATH          = V_FULLPATH
+          USER_ACTION       = V_RESULT.
+
+      "Convert internal table to xstring value
+      PERFORM CONVERT_ITAB_TO_EXCEL CHANGING V_XSTRING.
+
+      IF V_XSTRING IS NOT INITIAL.
+
+        CLEAR : T_BINTAB, V_SIZE.
+
+        "Convert binary code
+        CALL FUNCTION 'SCMS_XSTRING_TO_BINARY'
+          EXPORTING
+            BUFFER        = V_XSTRING
+          IMPORTING
+            OUTPUT_LENGTH = V_SIZE
+          TABLES
+            BINARY_TAB    = T_BINTAB.
+
+        "Download
+        CALL METHOD CL_GUI_FRONTEND_SERVICES=>GUI_DOWNLOAD
+          EXPORTING
+            BIN_FILESIZE            = V_SIZE
+            FILENAME                = V_FULLPATH
+            FILETYPE                = 'BIN'
+          CHANGING
+            DATA_TAB                = T_BINTAB
+          EXCEPTIONS
+            FILE_WRITE_ERROR        = 1
+            NO_BATCH                = 2
+            GUI_REFUSE_FILETRANSFER = 3
+            INVALID_TYPE            = 4
+            NO_AUTHORITY            = 5
+            UNKNOWN_ERROR           = 6
+            HEADER_NOT_ALLOWED      = 7
+            SEPARATOR_NOT_ALLOWED   = 8
+            FILESIZE_NOT_ALLOWED    = 9
+            HEADER_TOO_LONG         = 10
+            DP_ERROR_CREATE         = 11
+            DP_ERROR_SEND           = 12
+            DP_ERROR_WRITE          = 13
+            UNKNOWN_DP_ERROR        = 14
+            ACCESS_DENIED           = 15
+            DP_OUT_OF_MEMORY        = 16
+            DISK_FULL               = 17
+            DP_TIMEOUT              = 18
+            FILE_NOT_FOUND          = 19
+            DATAPROVIDER_EXCEPTION  = 20
+            CONTROL_FLUSH_ERROR     = 21
+            NOT_SUPPORTED_BY_GUI    = 22
+            ERROR_NO_GUI            = 23
+            OTHERS                  = 24.
+        IF SY-SUBRC IS INITIAL.
+          MESSAGE |Internal table converted successfully| TYPE 'S'.
+        ELSE.
+          MESSAGE |Failed to convert internal table| TYPE 'S' DISPLAY LIKE 'E'.
+        ENDIF.
+
+      ENDIF.
+  ENDCASE.
+
+  RS_SELFIELD-REFRESH = 'X'.
+ENDFORM.
+
+*&---------------------------------------------------------------------*
+*& Form LAYOUT
+*&---------------------------------------------------------------------*
+*& text
+*&---------------------------------------------------------------------*
+*& -->  p1        text
+*& <--  p2        text
+*&---------------------------------------------------------------------*
+FORM LAYOUT .
+  LAYOUT-COLWIDTH_OPTIMIZE = ABAP_TRUE.
+  LAYOUT-ZEBRA             = ABAP_TRUE.
+  LAYOUT-NO_INPUT          = ABAP_TRUE.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*& Form EVENTS
+*&---------------------------------------------------------------------*
+*& text
+*&---------------------------------------------------------------------*
+*& -->  p1        text
+*& <--  p2        text
+*&---------------------------------------------------------------------*
+FORM EVENTS .
+
+  EVENT-NAME = SLIS_EV_TOP_OF_PAGE.
+  EVENT-FORM = 'TOP_OF_PAGE'.
+  APPEND EVENT TO EVENTS.
+  CLEAR EVENT.
+
+ENDFORM.
+*&---------------------------------------------------------------------*
+*& Form TOP_OF_PAGE
+*&---------------------------------------------------------------------*
+*& text
+*&---------------------------------------------------------------------*
+*& -->  p1        text
+*& <--  p2        text
+*&---------------------------------------------------------------------*
+FORM TOP_OF_PAGE.
+
+  DATA: LT_HEADER  TYPE SLIS_T_LISTHEADER,
+        LS_HEADER  TYPE SLIS_LISTHEADER,
+        LS_ADDRESS TYPE BAPIADDR3,
+        LT_RETURN  TYPE TABLE OF BAPIRET2.
+
+  LS_HEADER-TYP  = 'H'.
+  LS_HEADER-INFO = 'Converting internal table to excel'.
+  APPEND LS_HEADER TO LT_HEADER.
+
+  CLEAR LS_HEADER.
+
+  CLEAR: LS_ADDRESS, LT_RETURN[].
+  CALL FUNCTION 'BAPI_USER_GET_DETAIL'
+    EXPORTING
+      USERNAME = SY-UNAME
+    IMPORTING
+      ADDRESS  = LS_ADDRESS
+    TABLES
+      RETURN   = LT_RETURN.
+
+  LS_HEADER-TYP  = 'S'.
+  LS_HEADER-KEY  = 'User : '.
+  LS_HEADER-INFO = LS_ADDRESS-FULLNAME.
+  APPEND LS_HEADER TO LT_HEADER.
+
+  CLEAR LS_HEADER.
+
+  LS_HEADER-TYP  = 'S'.
+  LS_HEADER-KEY  = 'Date/Time : '.
+  LS_HEADER-INFO = SY-DATUM.
+  APPEND LS_HEADER TO LT_HEADER.
+  CLEAR LS_HEADER.
+
+  CALL FUNCTION 'REUSE_ALV_COMMENTARY_WRITE'
+    EXPORTING
+      IT_LIST_COMMENTARY = LT_HEADER.
+
+ENDFORM.
+*&---------------------------------------------------------------------*
+*& Form CONVERT_ITAB_TO_EXCEL
+*&---------------------------------------------------------------------*
+*& text
+*&---------------------------------------------------------------------*
+*& -->  p1        text
+*& <--  p2        text
+*&---------------------------------------------------------------------*
+FORM CONVERT_ITAB_TO_EXCEL CHANGING V_XSTRING.
+
+  DATA: LR_XLDIMENSION TYPE REF TO IF_IXML_NODE,
+        LR_XLWORKSHEET TYPE REF TO IF_IXML_ELEMENT.
+
+  CLEAR V_XSTRING.
+
+  TRY.
+      CL_SALV_TABLE=>FACTORY( IMPORTING
+                                R_SALV_TABLE = DATA(LR_TABLE)
+                              CHANGING
+                                T_TABLE = RECS[]
+                            ).
+
+      DATA(LV_XLSX) = LR_TABLE->TO_XML( IF_SALV_BS_XML=>C_TYPE_XLSX ).
+
+      DATA(LR_ZIP) = NEW CL_ABAP_ZIP( ).
+
+      LR_ZIP->LOAD( LV_XLSX ).
+
+      LR_ZIP->GET( EXPORTING
+                      NAME = 'xl/worksheets/sheet1.xml'
+                   IMPORTING
+                      CONTENT = DATA(LV_FILE) ).
+
+      DATA(LR_FILE) = NEW CL_XML_DOCUMENT( ).
+      LR_FILE->PARSE_XSTRING( LV_FILE ).
+
+      "Row elements are under SheetData
+      DATA(LR_XLNODE) = LR_FILE->FIND_NODE( 'sheetData' ).
+      DATA(LR_XLROWS) = LR_XLNODE->GET_CHILDREN( ).
+
+      "Create new element in the XML file
+      LR_XLWORKSHEET ?= LR_FILE->FIND_NODE( 'worksheet' ).
+
+      DATA(LR_XLSHEETPR)   = CL_IXML=>CREATE( )->CREATE_DOCUMENT( )->CREATE_ELEMENT( NAME = 'sheetPr' ).
+
+      DATA(LR_XLOUTLINEPR) = CL_IXML=>CREATE( )->CREATE_DOCUMENT( )->CREATE_ELEMENT( NAME = 'outlinePr' ).
+
+      LR_XLSHEETPR->IF_IXML_NODE~APPEND_CHILD( LR_XLOUTLINEPR ).
+
+      LR_XLOUTLINEPR->SET_ATTRIBUTE( NAME  = 'summaryBelow'
+                                     VALUE = 'false' ).
+
+      LR_XLDIMENSION ?= LR_FILE->FIND_NODE( 'dimension' ).
+
+      LR_XLWORKSHEET->IF_IXML_NODE~INSERT_CHILD( NEW_CHILD = LR_XLSHEETPR
+                                                 REF_CHILD = LR_XLDIMENSION ).
+
+      " Create xstring and move it to XLSX
+      LR_FILE->RENDER_2_XSTRING( IMPORTING
+                                    STREAM = LV_FILE ).
+
+      LR_ZIP->DELETE( EXPORTING
+                        NAME = 'xl/worksheets/sheet1.xml' ).
+
+      LR_ZIP->ADD( EXPORTING
+                       NAME    = 'xl/worksheets/sheet1.xml'
+                       CONTENT = LV_FILE ).
+
+      V_XSTRING = LR_ZIP->SAVE( ).
+
+    CATCH CX_ROOT INTO DATA(LO_ROOT).
+
+      DATA(LV_MSG) = LO_ROOT->GET_TEXT( ).
+      MESSAGE LV_MSG TYPE 'E'.
+
+  ENDTRY.
+ENDFORM.
