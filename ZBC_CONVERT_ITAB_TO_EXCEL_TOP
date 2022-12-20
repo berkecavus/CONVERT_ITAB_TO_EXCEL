@@ -1,0 +1,24 @@
+*&---------------------------------------------------------------------*
+*& Include          ZBC_CONVERT_ITAB_TO_EXCEL_TOP
+*&---------------------------------------------------------------------*
+
+*"--> Internal Table
+DATA: RECS TYPE TABLE OF SBOOK.
+
+*"--> Fieldcatalog
+DATA: FIELDCAT TYPE SLIS_T_FIELDCAT_ALV.
+
+*"-->Display Settings
+DATA: LAYOUT TYPE SLIS_LAYOUT_ALV,
+      EVENTS TYPE SLIS_T_EVENT,
+      EVENT  TYPE SLIS_ALV_EVENT.
+
+*"--> xstring
+DATA: V_XSTRING TYPE XSTRING.
+
+SELECTION-SCREEN BEGIN OF BLOCK B1 WITH FRAME TITLE TEXT-100.
+
+  "The number of records to be pulled from the table
+  PARAMETERS: P_COUNT TYPE I.
+
+SELECTION-SCREEN END OF BLOCK B1.
